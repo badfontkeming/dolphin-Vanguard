@@ -446,7 +446,7 @@ bool WIARVZFileReader<RVZ>::ReadWiiDecrypted(u64 offset, u64 size, u8* out_ptr,
     if (!ReadFromGroups(&offset, &size, &out_ptr, chunk_size, VolumeWii::BLOCK_DATA_SIZE,
                         data_offset, data_size, Common::swap32(data.group_index),
                         Common::swap32(data.number_of_groups),
-                        std::max<u64>(1, chunk_size / VolumeWii::GROUP_DATA_SIZE)))
+                        static_cast<u32>(std::max<u64>(1, chunk_size / VolumeWii::GROUP_DATA_SIZE))))
     {
       return false;
     }
