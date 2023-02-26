@@ -1,11 +1,12 @@
 # Dolphin Vanguard
-All new releases available from the RTC Launcher
 
-I am no longer hosting releases here on Github. You can find the releases as part of the RTC launcher.
-Download link: http://redscientist.com/rtc
+Dolphin's RTC Vanguard implementation is based on a relatively old version of Dolphin
+at this point. Dolphin has since undergone a fair amount of internal refactoring, so
+this project is primarily focused on exploring the scope and difficulty of porting or
+rewriting Dolphin's Vanguard implementation for a newer version.
 
-
-
+**Don't count on anything to come of this.** I'm just picking away at this for the fun
+of it. It may be completed, or I may lose interest.
 
 # Dolphin - A GameCube and Wii Emulator
 
