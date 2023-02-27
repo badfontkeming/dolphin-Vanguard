@@ -1,53 +1,69 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 package org.dolphinemu.dolphinemu.ui.main;
 
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import androidx.core.splashscreen.SplashScreen;
+import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
 import androidx.leanback.app.BrowseSupportFragment;
 import androidx.leanback.widget.ArrayObjectAdapter;
 import androidx.leanback.widget.HeaderItem;
 import androidx.leanback.widget.ListRow;
 import androidx.leanback.widget.ListRowPresenter;
-import androidx.fragment.app.FragmentActivity;
-import androidx.fragment.app.FragmentManager;
-import androidx.core.content.ContextCompat;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
-import android.widget.Toast;
-
+import org.dolphinemu.dolphinemu.fragments.GridOptionDialogFragment;
 import org.dolphinemu.dolphinemu.R;
 import org.dolphinemu.dolphinemu.activities.EmulationActivity;
 import org.dolphinemu.dolphinemu.adapters.GameRowPresenter;
 import org.dolphinemu.dolphinemu.adapters.SettingsRowPresenter;
+import org.dolphinemu.dolphinemu.databinding.ActivityTvMainBinding;
 import org.dolphinemu.dolphinemu.features.settings.ui.MenuTag;
 import org.dolphinemu.dolphinemu.features.settings.ui.SettingsActivity;
 import org.dolphinemu.dolphinemu.model.GameFile;
 import org.dolphinemu.dolphinemu.model.TvSettingsItem;
-import org.dolphinemu.dolphinemu.utils.DirectoryInitialization;
-import org.dolphinemu.dolphinemu.services.GameFileCacheService;
+import org.dolphinemu.dolphinemu.services.GameFileCacheManager;
 import org.dolphinemu.dolphinemu.ui.platform.Platform;
+import org.dolphinemu.dolphinemu.utils.DirectoryInitialization;
 import org.dolphinemu.dolphinemu.utils.FileBrowserHelper;
 import org.dolphinemu.dolphinemu.utils.PermissionsHandler;
 import org.dolphinemu.dolphinemu.utils.StartupHandler;
 import org.dolphinemu.dolphinemu.utils.TvUtil;
 import org.dolphinemu.dolphinemu.viewholders.TvGameViewHolder;
 
+import java.util.ArrayList;
 import java.util.Collection;
 
-public final class TvMainActivity extends FragmentActivity implements MainView
+public final class TvMainActivity extends FragmentActivity
+        implements MainView, SwipeRefreshLayout.OnRefreshListener
 {
-  private MainPresenter mPresenter = new MainPresenter(this, this);
+  private final MainPresenter mPresenter = new MainPresenter(this, this);
+
+  private SwipeRefreshLayout mSwipeRefresh;
 
   private BrowseSupportFragment mBrowseFragment;
 
-  private ArrayObjectAdapter mRowsAdapter;
+  private final ArrayList<ArrayObjectAdapter> mGameRows = new ArrayList<>();
+
+  private ActivityTvMainBinding mBinding;
 
   @Override
   protected void onCreate(Bundle savedInstanceState)
   {
+    SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+    splashScreen.setKeepOnScreenCondition(
+            () -> !DirectoryInitialization.areDolphinDirectoriesReady());
+
     super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_tv_main);
+    mBinding = ActivityTvMainBinding.inflate(getLayoutInflater());
+    setContentView(mBinding.getRoot());
 
     setupUI();
 
@@ -64,8 +80,14 @@ public final class TvMainActivity extends FragmentActivity implements MainView
   protected void onResume()
   {
     super.onResume();
-    mPresenter.addDirIfNeeded(this);
-    GameFileCacheService.startRescan(this);
+
+    if (DirectoryInitialization.shouldStart(this))
+    {
+      DirectoryInitialization.start(this);
+      GameFileCacheManager.startLoad();
+    }
+
+    mPresenter.onResume();
   }
 
   @Override
@@ -86,11 +108,23 @@ public final class TvMainActivity extends FragmentActivity implements MainView
   protected void onStop()
   {
     super.onStop();
+
+    if (isChangingConfigurations())
+    {
+      MainPresenter.skipRescanningLibrary();
+    }
+
     StartupHandler.setSessionTime(this);
   }
 
   void setupUI()
   {
+    mSwipeRefresh = mBinding.swipeRefresh;
+
+    mSwipeRefresh.setOnRefreshListener(this);
+
+    setRefreshing(GameFileCacheManager.isLoadingOrRescanning());
+
     final FragmentManager fragmentManager = getSupportFragmentManager();
     mBrowseFragment = new BrowseSupportFragment();
     fragmentManager
@@ -100,7 +134,7 @@ public final class TvMainActivity extends FragmentActivity implements MainView
 
     // Set display parameters for the BrowseFragment
     mBrowseFragment.setHeadersState(BrowseSupportFragment.HEADERS_ENABLED);
-    mBrowseFragment.setBrandColor(ContextCompat.getColor(this, R.color.dolphin_blue_dark));
+    mBrowseFragment.setBrandColor(ContextCompat.getColor(this, R.color.dolphin_blue));
     buildRowsAdapter();
 
     mBrowseFragment.setOnItemViewClickedListener(
@@ -117,7 +151,8 @@ public final class TvMainActivity extends FragmentActivity implements MainView
                 TvGameViewHolder holder = (TvGameViewHolder) itemViewHolder;
 
                 // Start the emulation activity and send the path of the clicked ISO to it.
-                EmulationActivity.launch(TvMainActivity.this, holder.gameFile);
+                String[] paths = GameFileCacheManager.findSecondDiscAndGetPaths(holder.gameFile);
+                EmulationActivity.launch(TvMainActivity.this, paths, false);
               }
             });
   }
@@ -135,27 +170,39 @@ public final class TvMainActivity extends FragmentActivity implements MainView
   @Override
   public void launchSettingsActivity(MenuTag menuTag)
   {
-    SettingsActivity.launch(this, menuTag, "");
+    SettingsActivity.launch(this, menuTag);
   }
 
   @Override
   public void launchFileListActivity()
   {
-    FileBrowserHelper.openDirectoryPicker(this, FileBrowserHelper.GAME_EXTENSIONS);
+    if (DirectoryInitialization.preferOldFolderPicker(this))
+    {
+      FileBrowserHelper.openDirectoryPicker(this, FileBrowserHelper.GAME_EXTENSIONS);
+    }
+    else
+    {
+      Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+      startActivityForResult(intent, MainPresenter.REQUEST_DIRECTORY);
+    }
   }
 
   @Override
-  public void launchOpenFileActivity()
+  public void launchOpenFileActivity(int requestCode)
   {
-    FileBrowserHelper.openFilePicker(this, MainPresenter.REQUEST_GAME_FILE, false,
-            FileBrowserHelper.GAME_EXTENSIONS);
+    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.setType("*/*");
+    startActivityForResult(intent, requestCode);
   }
 
+  /**
+   * Shows or hides the loading indicator.
+   */
   @Override
-  public void launchInstallWAD()
+  public void setRefreshing(boolean refreshing)
   {
-    FileBrowserHelper.openFilePicker(this, MainPresenter.REQUEST_WAD_FILE, false,
-            FileBrowserHelper.WAD_EXTENSION);
+    mSwipeRefresh.setRefreshing(refreshing);
   }
 
   @Override
@@ -165,6 +212,21 @@ public final class TvMainActivity extends FragmentActivity implements MainView
     TvUtil.updateAllChannels(getApplicationContext());
 
     buildRowsAdapter();
+  }
+
+  @Override
+  public void reloadGrid()
+  {
+    for (ArrayObjectAdapter row : mGameRows)
+    {
+      row.notifyArrayItemRangeChanged(0, row.size());
+    }
+  }
+
+  @Override
+  public void showGridOptions()
+  {
+    new GridOptionDialogFragment().show(getSupportFragmentManager(), "gridOptions");
   }
 
   /**
@@ -178,31 +240,49 @@ public final class TvMainActivity extends FragmentActivity implements MainView
   protected void onActivityResult(int requestCode, int resultCode, Intent result)
   {
     super.onActivityResult(requestCode, resultCode, result);
-    switch (requestCode)
+
+    // If the user picked a file, as opposed to just backing out.
+    if (resultCode == RESULT_OK)
     {
-      case MainPresenter.REQUEST_DIRECTORY:
-        // If the user picked a file, as opposed to just backing out.
-        if (resultCode == MainActivity.RESULT_OK)
-        {
-          mPresenter.onDirectorySelected(FileBrowserHelper.getSelectedPath(result));
-        }
-        break;
+      Uri uri = result.getData();
+      switch (requestCode)
+      {
+        case MainPresenter.REQUEST_DIRECTORY:
+          if (DirectoryInitialization.preferOldFolderPicker(this))
+          {
+            mPresenter.onDirectorySelected(FileBrowserHelper.getSelectedPath(result));
+          }
+          else
+          {
+            mPresenter.onDirectorySelected(result);
+          }
+          break;
 
-      case MainPresenter.REQUEST_GAME_FILE:
-        // If the user picked a file, as opposed to just backing out.
-        if (resultCode == MainActivity.RESULT_OK)
-        {
-          EmulationActivity.launchFile(this, FileBrowserHelper.getSelectedFiles(result));
-        }
-        break;
+        case MainPresenter.REQUEST_GAME_FILE:
+          FileBrowserHelper.runAfterExtensionCheck(this, uri,
+                  FileBrowserHelper.GAME_LIKE_EXTENSIONS,
+                  () -> EmulationActivity.launch(this, result.getData().toString(), false));
+          break;
 
-      case MainPresenter.REQUEST_WAD_FILE:
-        // If the user picked a file, as opposed to just backing out.
-        if (resultCode == MainActivity.RESULT_OK)
-        {
-          mPresenter.installWAD(FileBrowserHelper.getSelectedPath(result));
-        }
-        break;
+        case MainPresenter.REQUEST_WAD_FILE:
+          FileBrowserHelper.runAfterExtensionCheck(this, uri, FileBrowserHelper.WAD_EXTENSION,
+                  () -> mPresenter.installWAD(result.getData().toString()));
+          break;
+
+        case MainPresenter.REQUEST_WII_SAVE_FILE:
+          FileBrowserHelper.runAfterExtensionCheck(this, uri, FileBrowserHelper.BIN_EXTENSION,
+                  () -> mPresenter.importWiiSave(result.getData().toString()));
+          break;
+
+        case MainPresenter.REQUEST_NAND_BIN_FILE:
+          FileBrowserHelper.runAfterExtensionCheck(this, uri, FileBrowserHelper.BIN_EXTENSION,
+                  () -> mPresenter.importNANDBin(result.getData().toString()));
+          break;
+      }
+    }
+    else
+    {
+      MainPresenter.skipRescanningLibrary();
     }
   }
 
@@ -210,49 +290,54 @@ public final class TvMainActivity extends FragmentActivity implements MainView
   public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
           @NonNull int[] grantResults)
   {
-    switch (requestCode)
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+    if (requestCode == PermissionsHandler.REQUEST_CODE_WRITE_PERMISSION)
     {
-      case PermissionsHandler.REQUEST_CODE_WRITE_PERMISSION:
-        if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
-        {
-          DirectoryInitialization.start(this);
-          GameFileCacheService.startLoad(this);
-        }
-        else
-        {
-          Toast.makeText(this, R.string.write_permission_needed, Toast.LENGTH_SHORT)
-                  .show();
-        }
-        break;
-      default:
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        break;
+      if (grantResults[0] == PackageManager.PERMISSION_DENIED)
+      {
+        PermissionsHandler.setWritePermissionDenied();
+      }
+
+      DirectoryInitialization.start(this);
+      GameFileCacheManager.startLoad();
     }
+  }
+
+  /**
+   * Called when the user requests a refresh by swiping down.
+   */
+  @Override
+  public void onRefresh()
+  {
+    setRefreshing(true);
+    GameFileCacheManager.startRescan();
   }
 
   private void buildRowsAdapter()
   {
-    mRowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
+    ArrayObjectAdapter rowsAdapter = new ArrayObjectAdapter(new ListRowPresenter());
+    mGameRows.clear();
 
-    if (PermissionsHandler.hasWriteAccess(this))
+    if (!DirectoryInitialization.isWaitingForWriteAccess(this))
     {
-      GameFileCacheService.startLoad(this);
+      GameFileCacheManager.startLoad();
     }
 
     for (Platform platform : Platform.values())
     {
-      ListRow row = buildGamesRow(platform, GameFileCacheService.getGameFilesForPlatform(platform));
+      ListRow row = buildGamesRow(platform, GameFileCacheManager.getGameFilesForPlatform(platform));
 
       // Add row to the adapter only if it is not empty.
       if (row != null)
       {
-        mRowsAdapter.add(row);
+        rowsAdapter.add(row);
       }
     }
 
-    mRowsAdapter.add(buildSettingsRow());
+    rowsAdapter.add(buildSettingsRow());
 
-    mBrowseFragment.setAdapter(mRowsAdapter);
+    mBrowseFragment.setAdapter(rowsAdapter);
   }
 
   private ListRow buildGamesRow(Platform platform, Collection<GameFile> gameFiles)
@@ -264,11 +349,14 @@ public final class TvMainActivity extends FragmentActivity implements MainView
     }
 
     // Create an adapter for this row.
-    ArrayObjectAdapter row = new ArrayObjectAdapter(new GameRowPresenter());
+    ArrayObjectAdapter row = new ArrayObjectAdapter(new GameRowPresenter(this));
     row.addAll(0, gameFiles);
 
+    // Keep a reference to the row in case we need to refresh it.
+    mGameRows.add(row);
+
     // Create a header for this row.
-    HeaderItem header = new HeaderItem(platform.toInt(), platform.getHeaderName());
+    HeaderItem header = new HeaderItem(platform.toInt(), getString(platform.getHeaderName()));
 
     // Create the row, passing it the filled adapter and the header, and give it to the master adapter.
     return new ListRow(header, row);
@@ -278,41 +366,52 @@ public final class TvMainActivity extends FragmentActivity implements MainView
   {
     ArrayObjectAdapter rowItems = new ArrayObjectAdapter(new SettingsRowPresenter());
 
-    rowItems.add(new TvSettingsItem(R.id.menu_settings_core,
-            R.drawable.ic_settings_core_tv,
-            R.string.grid_menu_config));
-
-    rowItems.add(new TvSettingsItem(R.id.menu_settings_graphics,
-            R.drawable.ic_settings_graphics_tv,
-            R.string.grid_menu_graphics_settings));
-
-    rowItems.add(new TvSettingsItem(R.id.menu_settings_gcpad,
-            R.drawable.ic_settings_gcpad,
-            R.string.grid_menu_gcpad_settings));
-
-    rowItems.add(new TvSettingsItem(R.id.menu_settings_wiimote,
-            R.drawable.ic_settings_wiimote,
-            R.string.grid_menu_wiimote_settings));
+    rowItems.add(new TvSettingsItem(R.id.menu_settings,
+            R.drawable.ic_settings_tv,
+            R.string.grid_menu_settings));
 
     rowItems.add(new TvSettingsItem(R.id.button_add_directory,
             R.drawable.ic_add_tv,
             R.string.add_directory_title));
+
+    rowItems.add(new TvSettingsItem(R.id.menu_grid_options,
+            R.drawable.ic_list_tv,
+            R.string.grid_menu_grid_options));
 
     rowItems.add(new TvSettingsItem(R.id.menu_refresh,
             R.drawable.ic_refresh_tv,
             R.string.grid_menu_refresh));
 
     rowItems.add(new TvSettingsItem(R.id.menu_open_file,
-            R.drawable.ic_play,
+            R.drawable.ic_play_tv,
             R.string.grid_menu_open_file));
 
     rowItems.add(new TvSettingsItem(R.id.menu_install_wad,
-            R.drawable.ic_folder,
+            R.drawable.ic_folder_tv,
             R.string.grid_menu_install_wad));
 
+    rowItems.add(new TvSettingsItem(R.id.menu_load_wii_system_menu,
+            R.drawable.ic_folder_tv,
+            R.string.grid_menu_load_wii_system_menu));
+
+    rowItems.add(new TvSettingsItem(R.id.menu_import_wii_save,
+            R.drawable.ic_folder_tv,
+            R.string.grid_menu_import_wii_save));
+
+    rowItems.add(new TvSettingsItem(R.id.menu_import_nand_backup,
+            R.drawable.ic_folder_tv,
+            R.string.grid_menu_import_nand_backup));
+
+    rowItems.add(new TvSettingsItem(R.id.menu_online_system_update,
+            R.drawable.ic_folder_tv,
+            R.string.grid_menu_online_system_update));
+
+    rowItems.add(new TvSettingsItem(R.id.menu_about,
+            R.drawable.ic_info_tv,
+            R.string.grid_menu_about));
+
     // Create a header for this row.
-    HeaderItem header =
-            new HeaderItem(R.string.preferences_settings, getString(R.string.preferences_settings));
+    HeaderItem header = new HeaderItem(R.string.settings, getString(R.string.settings));
 
     return new ListRow(header, rowItems);
   }

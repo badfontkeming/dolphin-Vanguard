@@ -1,6 +1,7 @@
 // Copyright 2017 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "VideoCommon/AbstractStagingTexture.h"
 
 #include <algorithm>
 #include <cstring>
@@ -9,7 +10,6 @@
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/StringUtil.h"
-#include "VideoCommon/AbstractStagingTexture.h"
 #include "VideoCommon/AbstractTexture.h"
 
 AbstractStagingTexture::AbstractStagingTexture(StagingTextureType type, const TextureConfig& c)

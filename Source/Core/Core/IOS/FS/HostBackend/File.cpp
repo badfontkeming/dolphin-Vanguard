@@ -1,16 +1,15 @@
 // Copyright 2018 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#include "Core/IOS/FS/HostBackend/FS.h"
 
 #include <algorithm>
 #include <memory>
 
-#include "Common/File.h"
 #include "Common/FileUtil.h"
+#include "Common/IOFile.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
-
-#include "Core/IOS/FS/HostBackend/FS.h"
 
 namespace IOS::HLE::FS
 {
@@ -50,15 +49,15 @@ std::shared_ptr<File::IOFile> HostFileSystem::OpenHostFile(const std::string& ho
     const bool try_again = false;
     /*
     const bool try_again =
-        PanicYesNo("File \"%s\" could not be opened!\n"
-                   "This may happen with improper permissions or use by another process.\n"
-                   "Press \"Yes\" to make another attempt.",
-                   host_path.c_str());
-                   */
+        PanicYesNoFmt("File \"{}\" could not be opened!\n"
+                      "This may happen with improper permissions or use by another process.\n"
+                      "Press \"Yes\" to make another attempt.",
+                      host_path);
+
     if (!try_again)
     {
       // We've failed to open the file:
-      ERROR_LOG(IOS_FS, "OpenHostFile %s", host_path.c_str());
+      ERROR_LOG_FMT(IOS_FS, "OpenHostFile {}", host_path);
       return nullptr;
     }
   }
@@ -84,7 +83,7 @@ Result<FileHandle> HostFileSystem::OpenFile(Uid, Gid, const std::string& path, M
   if (!handle)
     return ResultCode::NoFreeHandle;
 
-  const std::string host_path = BuildFilename(path);
+  const std::string host_path = BuildFilename(path).host_path;
   if (!File::IsFile(host_path))
   {
     *handle = Handle{};
@@ -131,7 +130,7 @@ Result<u32> HostFileSystem::ReadBytesFromFile(Fd fd, u8* ptr, u32 count)
     count = file_size - handle->file_offset;
 
   // File might be opened twice, need to seek before we read
-  handle->host_file->Seek(handle->file_offset, SEEK_SET);
+  handle->host_file->Seek(handle->file_offset, File::SeekOrigin::Begin);
   const u32 actually_read = static_cast<u32>(fread(ptr, 1, count, handle->host_file->GetHandle()));
 
   if (actually_read != count && ferror(handle->host_file->GetHandle()))
@@ -153,7 +152,7 @@ Result<u32> HostFileSystem::WriteBytesToFile(Fd fd, const u8* ptr, u32 count)
     return ResultCode::AccessDenied;
 
   // File might be opened twice, need to seek before we read
-  handle->host_file->Seek(handle->file_offset, SEEK_SET);
+  handle->host_file->Seek(handle->file_offset, File::SeekOrigin::Begin);
   if (!handle->host_file->WriteBytes(ptr, count))
     return ResultCode::AccessDenied;
 

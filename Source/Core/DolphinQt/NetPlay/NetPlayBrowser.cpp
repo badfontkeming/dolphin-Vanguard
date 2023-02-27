@@ -1,6 +1,5 @@
 // Copyright 2019 Dolphin Emulator Project
-// Licensed under GPLv2+
-// Refer to the license.txt file included.
+// SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "DolphinQt/NetPlay/NetPlayBrowser.h"
 
@@ -26,7 +25,7 @@
 #include "Core/ConfigManager.h"
 
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
-#include "DolphinQt/QtUtils/RunOnObject.h"
+#include "DolphinQt/QtUtils/NonDefaultQPushButton.h"
 #include "DolphinQt/Settings.h"
 
 NetPlayBrowser::NetPlayBrowser(QWidget* parent) : QDialog(parent)
@@ -35,6 +34,7 @@ NetPlayBrowser::NetPlayBrowser(QWidget* parent) : QDialog(parent)
   setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
   CreateWidgets();
+  RestoreSettings();
   ConnectWidgets();
 
   resize(750, 500);
@@ -44,8 +44,6 @@ NetPlayBrowser::NetPlayBrowser(QWidget* parent) : QDialog(parent)
 
   m_refresh_run.Set(true);
   m_refresh_thread = std::thread([this] { RefreshLoop(); });
-
-  RestoreSettings();
 
   UpdateList();
   Refresh();
@@ -87,7 +85,7 @@ void NetPlayBrowser::CreateWidgets()
 
   m_status_label = new QLabel;
   m_button_box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-  m_button_refresh = new QPushButton(tr("Refresh"));
+  m_button_refresh = new NonDefaultQPushButton(tr("Refresh"));
   m_edit_name = new QLineEdit;
   m_edit_game_id = new QLineEdit;
   m_check_hide_incompatible = new QCheckBox(tr("Hide Incompatible Sessions"));
@@ -149,6 +147,11 @@ void NetPlayBrowser::ConnectWidgets()
   connect(m_table_widget, &QTableWidget::itemSelectionChanged, this,
           &NetPlayBrowser::OnSelectionChanged);
   connect(m_table_widget, &QTableWidget::itemDoubleClicked, this, &NetPlayBrowser::accept);
+
+  connect(this, &NetPlayBrowser::UpdateStatusRequested, this,
+          &NetPlayBrowser::OnUpdateStatusRequested, Qt::QueuedConnection);
+  connect(this, &NetPlayBrowser::UpdateListRequested, this, &NetPlayBrowser::OnUpdateListRequested,
+          Qt::QueuedConnection);
 }
 
 void NetPlayBrowser::Refresh()
@@ -156,7 +159,7 @@ void NetPlayBrowser::Refresh()
   std::map<std::string, std::string> filters;
 
   if (m_check_hide_incompatible->isChecked())
-    filters["version"] = Common::scm_desc_str;
+    filters["version"] = Common::GetScmDescStr();
 
   if (!m_edit_name->text().isEmpty())
     filters["name"] = m_edit_name->text().toStdString();
@@ -192,10 +195,7 @@ void NetPlayBrowser::RefreshLoop()
 
       lock.unlock();
 
-      RunOnObject(this, [this] {
-        m_status_label->setText(tr("Refreshing..."));
-        return nullptr;
-      });
+      emit UpdateStatusRequested(tr("Refreshing..."));
 
       NetPlayIndex client;
 
@@ -203,19 +203,12 @@ void NetPlayBrowser::RefreshLoop()
 
       if (entries)
       {
-        RunOnObject(this, [this, &entries] {
-          m_sessions = *entries;
-          UpdateList();
-          return nullptr;
-        });
+        emit UpdateListRequested(std::move(*entries));
       }
       else
       {
-        RunOnObject(this, [this, &client] {
-          m_status_label->setText(tr("Error obtaining session list: %1")
-                                      .arg(QString::fromStdString(client.GetLastError())));
-          return nullptr;
-        });
+        emit UpdateStatusRequested(tr("Error obtaining session list: %1")
+                                       .arg(QString::fromStdString(client.GetLastError())));
       }
     }
   }
@@ -254,7 +247,7 @@ void NetPlayBrowser::UpdateList()
     auto* player_count = new QTableWidgetItem(QStringLiteral("%1").arg(entry.player_count));
     auto* version = new QTableWidgetItem(QString::fromStdString(entry.version));
 
-    const bool enabled = Common::scm_desc_str == entry.version;
+    const bool enabled = Common::GetScmDescStr() == entry.version;
 
     for (const auto& item : {region, name, password, in_game, game_id, player_count, version})
       item->setFlags(enabled ? Qt::ItemIsEnabled | Qt::ItemIsSelectable : Qt::NoItemFlags);
@@ -276,6 +269,17 @@ void NetPlayBrowser::OnSelectionChanged()
 {
   m_button_box->button(QDialogButtonBox::Ok)
       ->setEnabled(!m_table_widget->selectedItems().isEmpty());
+}
+
+void NetPlayBrowser::OnUpdateStatusRequested(const QString& status)
+{
+  m_status_label->setText(status);
+}
+
+void NetPlayBrowser::OnUpdateListRequested(std::vector<NetPlaySession> sessions)
+{
+  m_sessions = std::move(sessions);
+  UpdateList();
 }
 
 void NetPlayBrowser::accept()

@@ -1,56 +1,35 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|ARM64">
-      <Configuration>Debug</Configuration>
-      <Platform>ARM64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Debug|x64">
-      <Configuration>Debug</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|ARM64">
-      <Configuration>Release</Configuration>
-      <Platform>ARM64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|x64">
-      <Configuration>Release</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
-  </ItemGroup>
+<Project>
+  <Import Project="..\..\Source\VSProps\Base.Macros.props" />
+  <Import Project="$(VSPropsDir)Base.Targets.props" />
   <PropertyGroup Label="Globals">
     <ProjectGuid>{D178061B-84D3-44F9-BEED-EFD18D9033F0}</ProjectGuid>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
-    <PlatformToolset>v142</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
-    <UseDebugLibraries>true</UseDebugLibraries>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
-    <UseDebugLibraries>false</UseDebugLibraries>
-  </PropertyGroup>
+  <Import Project="$(VSPropsDir)Configuration.StaticLibrary.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings">
-  </ImportGroup>
+  <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-    <Import Project="..\..\Source\VSProps\Base.props" />
-    <Import Project="..\..\Source\VSProps\ClDisableAllWarnings.props" />
+    <Import Project="$(VSPropsDir)Base.props" />
+    <Import Project="$(VSPropsDir)ClDisableAllWarnings.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <ItemDefinitionGroup>
     <ClCompile>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>.;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="glslang\GenericCodeGen\CodeGen.cpp" />
     <ClCompile Include="glslang\GenericCodeGen\Link.cpp" />
+    <!--<ClCompile Include="glslang\HLSL\hlslAttributes.cpp" />
+    <ClCompile Include="glslang\HLSL\hlslGrammar.cpp" />
+    <ClCompile Include="glslang\HLSL\hlslOpMap.cpp" />
+    <ClCompile Include="glslang\HLSL\hlslParseables.cpp" />
+    <ClCompile Include="glslang\HLSL\hlslParseHelper.cpp" />
+    <ClCompile Include="glslang\HLSL\hlslScanContext.cpp" />
+    <ClCompile Include="glslang\HLSL\hlslTokenStream.cpp" />-->
     <ClCompile Include="glslang\MachineIndependent\attribute.cpp" />
     <ClCompile Include="glslang\MachineIndependent\Constant.cpp" />
     <ClCompile Include="glslang\MachineIndependent\glslang_tab.cpp" />
@@ -76,6 +55,7 @@
     <ClCompile Include="glslang\MachineIndependent\RemoveTree.cpp" />
     <ClCompile Include="glslang\MachineIndependent\Scan.cpp" />
     <ClCompile Include="glslang\MachineIndependent\ShaderLang.cpp" />
+    <ClCompile Include="glslang\MachineIndependent\SpirvIntrinsics.cpp" />
     <ClCompile Include="glslang\MachineIndependent\SymbolTable.cpp" />
     <ClCompile Include="glslang\MachineIndependent\Versions.cpp" />
     <ClCompile Include="glslang\OSDependent\Windows\ossource.cpp" />
@@ -91,6 +71,15 @@
     <ClCompile Include="StandAlone\ResourceLimits.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <!--<ClInclude Include="glslang\HLSL\hlslAttributes.h" />
+    <ClInclude Include="glslang\HLSL\hlslGrammar.h" />
+    <ClInclude Include="glslang\HLSL\hlslOpMap.h" />
+    <ClInclude Include="glslang\HLSL\hlslParseables.h" />
+    <ClInclude Include="glslang\HLSL\hlslParseHelper.h" />
+    <ClInclude Include="glslang\HLSL\hlslScanContext.h" />
+    <ClInclude Include="glslang\HLSL\hlslTokens.h" />
+    <ClInclude Include="glslang\HLSL\hlslTokenStream.h" />
+    <ClInclude Include="glslang\HLSL\pch.h" />-->
     <ClInclude Include="glslang\Include\arrays.h" />
     <ClInclude Include="glslang\Include\BaseTypes.h" />
     <ClInclude Include="glslang\Include\Common.h" />
@@ -101,6 +90,7 @@
     <ClInclude Include="glslang\Include\PoolAlloc.h" />
     <ClInclude Include="glslang\Include\revision.h" />
     <ClInclude Include="glslang\Include\ShHandle.h" />
+    <ClInclude Include="glslang\Include\SpirvIntrinsics.h" />
     <ClInclude Include="glslang\Include\Types.h" />
     <ClInclude Include="glslang\MachineIndependent\attribute.h" />
     <ClInclude Include="glslang\MachineIndependent\glslang_tab.cpp.h" />
@@ -128,6 +118,7 @@
     <ClInclude Include="SPIRV\GLSL.std.450.h" />
     <ClInclude Include="SPIRV\GlslangToSpv.h" />
     <ClInclude Include="SPIRV\Logger.h" />
+    <ClInclude Include="SPIRV\NonSemanticDebugPrintf.h" />
     <ClInclude Include="SPIRV\spirv.hpp" />
     <ClInclude Include="SPIRV\SpvBuilder.h" />
     <ClInclude Include="SPIRV\spvIR.h" />
