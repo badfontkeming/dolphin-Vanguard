@@ -20,6 +20,8 @@
     <!--This project also compiles gtest-->
     <ClCompile>
       <AdditionalIncludeDirectories>$(ExternalsDir)gtest\googletest\include;$(ExternalsDir)gtest\googletest;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <EnableModules Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</EnableModules>
+      <EnableModules Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</EnableModules>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

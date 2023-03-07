@@ -19,22 +19,6 @@
   <PropertyGroup>
     <msgfmt>..\Externals\gettext\msgfmt</msgfmt>
   </PropertyGroup>
-  <PropertyGroup Label="UserMacros" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClCompile />
-    <ClCompile>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-    </ClCompile>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile>
-      <LanguageStandard>stdcpp17</LanguageStandard>
-    </ClCompile>
-  </ItemDefinitionGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets">
-    <Import Project="po.targets" />
-  </ImportGroup>
   <ItemGroup>
     <PoFiles Include="po\*.po" />
     <MoFiles Include="@(PoFiles -> '$(OutDir)%(Filename).mo')" />
